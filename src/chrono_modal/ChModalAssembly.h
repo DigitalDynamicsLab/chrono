@@ -617,7 +617,6 @@ class ChApiModal ChModalAssembly : public ChAssembly {
     ChSparseMatrix full_R_loc;
     ChSparseMatrix full_Cq_loc;
 
-
     // reduced system matrices in the local floating frame of reference F
     ChMatrixDynamic<> M_red;
     ChMatrixDynamic<> K_red;
@@ -660,12 +659,17 @@ class ChApiModal ChModalAssembly : public ChAssembly {
     unsigned int m_num_meshes_internal;             ///< number of internal meshes
     unsigned int m_num_otherphysicsitems_internal;  ///< number of internal other physics items
 
-    unsigned int m_num_coords_pos_internal;  ///< number of scalar coordinates at position level for all active internal objects
-    unsigned int m_num_coords_vel_internal;  ///< number of scalar coordinates at velocity level for all active internal objects
+    unsigned int
+        m_num_coords_pos_internal;  ///< number of scalar coordinates at position level for all active internal objects
+    unsigned int
+        m_num_coords_vel_internal;  ///< number of scalar coordinates at velocity level for all active internal objects
 
-    unsigned int m_num_constr_internal;      ///< number of scalar constraints (velocity level), for all active internal objects
-    unsigned int m_num_constr_bil_internal;  ///< number of bilateral scalar constraints (velocity level) of internal objects
-    unsigned int m_num_constr_uni_internal;  ///< number of unilateral scalar constraints (velocity level) of internal objects
+    unsigned int
+        m_num_constr_internal;  ///< number of scalar constraints (velocity level), for all active internal objects
+    unsigned int
+        m_num_constr_bil_internal;  ///< number of bilateral scalar constraints (velocity level) of internal objects
+    unsigned int
+        m_num_constr_uni_internal;  ///< number of unilateral scalar constraints (velocity level) of internal objects
 
     // BOUNDARY bodies, meshes etc.: those of the parent class ChAssembly.
     unsigned int m_num_bodies_boundary;             ///< number of boundary bodies
@@ -673,10 +677,13 @@ class ChApiModal ChModalAssembly : public ChAssembly {
     unsigned int m_num_meshes_boundary;             ///< number of boundary meshes
     unsigned int m_num_otherphysicsitems_boundary;  ///< number of boundary other physics items
 
-    unsigned int m_num_coords_pos_boundary;  ///< number of scalar coordinates at position level for all active boundary objects
-    unsigned int m_num_coords_vel_boundary;  ///< number of scalar coordinates at velocity level for all active boundary objects
+    unsigned int
+        m_num_coords_pos_boundary;  ///< number of scalar coordinates at position level for all active boundary objects
+    unsigned int
+        m_num_coords_vel_boundary;  ///< number of scalar coordinates at velocity level for all active boundary objects
 
-    unsigned int m_num_constr_boundary;      ///< number of scalar constraints (velocity level), for all active boundary objects
+    unsigned int
+        m_num_constr_boundary;  ///< number of scalar constraints (velocity level), for all active boundary objects
     unsigned int m_num_constr_bil_boundary;  ///< number of bilateral scalar constraints (velocity level) at boundary
     unsigned int m_num_constr_uni_boundary;  ///< number of unilateral scalar constraints (velocity level) at boundary
 
@@ -685,8 +692,8 @@ class ChApiModal ChModalAssembly : public ChAssembly {
 
     bool m_is_model_reduced;  ///< flag to indicate whether in the modal "reduced" state.
 
-    bool internal_nodes_update;  ///< flag to indicate whether the internal nodes will update for
-                                 ///< visualization/postprocessing
+    bool m_internal_nodes_update;  ///< flag to indicate whether the internal nodes will update for
+                                   ///< visualization/postprocessing
 
     mutable ChTimer m_timer_matrix_assembly;
     mutable ChTimer m_timer_modal_solver_call;
