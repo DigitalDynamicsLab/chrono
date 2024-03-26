@@ -32,11 +32,15 @@ ChModalAssembly::ChModalAssembly()
     : modal_variables(nullptr), m_num_coords_modal(0), m_is_model_reduced(false), m_internal_nodes_update(true) {}
 
 ChModalAssembly::ChModalAssembly(const ChModalAssembly& other) : ChAssembly(other) {
+    m_modal_reduction_type = other.m_modal_reduction_type;
     m_is_model_reduced = other.m_is_model_reduced;
+    m_internal_nodes_update = other.m_internal_nodes_update;
+    m_modal_automatic_gravity = other.m_modal_automatic_gravity;
+
     modal_q = other.modal_q;
     modal_q_dt = other.modal_q_dt;
     modal_q_dtdt = other.modal_q_dtdt;
-    m_internal_nodes_update = other.m_internal_nodes_update;
+
     full_forces_internal = other.full_forces_internal;
 
     //// TODO:  deep copy of the object lists (internal_bodylist, internal_linklist, internal_meshlist,
@@ -550,22 +554,22 @@ void ChModalAssembly::ComputeProjectionMatrix() {
 void ChModalAssembly::ComputeLocalFullKMCqMatrix(ChSparseMatrix& full_M,
                                                  ChSparseMatrix& full_K,
                                                  ChSparseMatrix& full_Cq) {
-    // todo: to fill the sparse P_BI in a more straightforward and efficient way
-    ChMatrixDynamic<> P_BI;
-    P_BI.setIdentity(m_num_coords_vel_boundary + m_num_coords_vel_internal,
+    // todo: to fill the sparse L_BI in a more straightforward and efficient way
+    ChMatrixDynamic<> L_BI;
+    L_BI.setIdentity(m_num_coords_vel_boundary + m_num_coords_vel_internal,
                      m_num_coords_vel_boundary + m_num_coords_vel_internal);
     for (unsigned int i_bou = 0; i_bou < m_num_coords_vel_boundary / 6; i_bou++) {
-        P_BI.block(6 * i_bou, 6 * i_bou, 3, 3) = floating_frame_F.GetRotMat();
+        L_BI.block(6 * i_bou, 6 * i_bou, 3, 3) = floating_frame_F.GetRotMat();
     }
     for (unsigned int i_int = 0; i_int < m_num_coords_vel_internal / 6; i_int++) {
-        P_BI.block(m_num_coords_vel_boundary + 6 * i_int, m_num_coords_vel_boundary + 6 * i_int, 3, 3) =
+        L_BI.block(m_num_coords_vel_boundary + 6 * i_int, m_num_coords_vel_boundary + 6 * i_int, 3, 3) =
             floating_frame_F.GetRotMat();
     }
-    ChSparseMatrix P_BI_sp = P_BI.sparseView();
+    ChSparseMatrix L_BI_sp = L_BI.sparseView();
 
-    full_M_loc = P_BI_sp.transpose() * full_M * P_BI_sp;
-    full_K_loc = P_BI_sp.transpose() * full_K * P_BI_sp;
-    full_Cq_loc = full_Cq * P_BI_sp;
+    full_M_loc = L_BI_sp.transpose() * full_M * L_BI_sp;
+    full_K_loc = L_BI_sp.transpose() * full_K * L_BI_sp;
+    full_Cq_loc = full_Cq * L_BI_sp;
 
     full_M_loc.makeCompressed();
     full_K_loc.makeCompressed();
@@ -575,17 +579,12 @@ void ChModalAssembly::ComputeLocalFullKMCqMatrix(ChSparseMatrix& full_M,
     // todo: develop a more reasonable modal damping model
     ChSparseMatrix full_R;
     this->GetSubassemblyDampingMatrix(&full_R);
-    full_R_loc = P_BI_sp.transpose() * full_R * P_BI_sp;
+    full_R_loc = L_BI_sp.transpose() * full_R * L_BI_sp;
     full_R_loc.makeCompressed();
 }
 
 void ChModalAssembly::ApplyModalReductionTransformation_Herting(const ChModalDamping& damping_model) {
-    // 1) compute eigenvalue and eigenvectors of the full modal assembly.
-    // It is calculated in the local floating frame of reference F, thus there must be six rigid-body modes.
-    // It is expected that the eigenvalues of the six rigid-body modes are zero, but
-    // maybe nonzero if the geometrical stiffness matrix Kg is involved, we also have the opportunity
-    // to consider the inertial damping and inertial stiffness matrices Ri,Ki respectively.
-
+    // since the eigen problem is solved with free-free condition, there must be six rigid-body modes.
     assert(this->m_modal_eigvect.cols() >= 6);  // at least six rigid-body modes are required.
 
     // K_IIc = [  K_II   Cq_II' ]
@@ -737,7 +736,8 @@ void ChModalAssembly::ApplyModalReductionTransformation_Herting(const ChModalDam
     }
 
     // Reset to zero all the atomic masses of the boundary nodes because now their mass is represented by
-    // this->modal_M NOTE! this should be made more generic and future-proof by implementing a virtual method ex.
+    // this->modal_M.
+    // NOTE! this should be made more generic and future-proof by implementing a virtual method ex.
     // RemoveMass() in all ChPhysicsItem
     for (auto& body : bodylist) {
         body->SetMass(0);
@@ -766,11 +766,6 @@ void ChModalAssembly::ApplyModalReductionTransformation_Herting(const ChModalDam
 }
 
 void ChModalAssembly::ApplyModalReductionTransformation_CraigBampton(const ChModalDamping& damping_model) {
-    // 1) compute eigenvalue and eigenvectors of the full modal assembly.
-    // It is calculated in the local floating frame of reference F, thus there must be six rigid-body modes.
-    // It is expected that the eigenvalues of the six rigid-body modes are zero, but
-    // maybe nonzero if the geometrical stiffness matrix Kg is involved, we also have the opportunity
-    // to consider the inertial damping and inertial stiffness matrices Ri,Ki respectively.
 
     // K_IIc = [  K_II   Cq_II' ]
     //         [ Cq_II     0    ]
@@ -2908,12 +2903,14 @@ void ChModalAssembly::ArchiveOut(ChArchiveOut& archive_out) {
     archive_out << CHNVP(internal_linklist, "internal_links");
     archive_out << CHNVP(internal_meshlist, "internal_meshes");
     archive_out << CHNVP(internal_otherphysicslist, "internal_other_physics_items");
+    archive_out << CHNVP(m_modal_reduction_type, "m_modal_reduction_type");
     archive_out << CHNVP(m_is_model_reduced, "m_is_model_reduced");
+    archive_out << CHNVP(m_internal_nodes_update, "m_internal_nodes_update");
+    archive_out << CHNVP(m_modal_automatic_gravity, "m_modal_automatic_gravity");
     archive_out << CHNVP(modal_q, "modal_q");
     archive_out << CHNVP(modal_q_dt, "modal_q_dt");
     archive_out << CHNVP(modal_q_dtdt, "modal_q_dtdt");
     archive_out << CHNVP(full_forces_internal, "full_forces_internal");
-    archive_out << CHNVP(m_internal_nodes_update, "internal_nodes_update");
 }
 
 void ChModalAssembly::ArchiveIn(ChArchiveIn& archive_in) {
@@ -2947,12 +2944,14 @@ void ChModalAssembly::ArchiveIn(ChArchiveIn& archive_in) {
     for (auto& mphys : tempotherphysics)
         AddInternalOtherPhysicsItem(mphys);
 
+    archive_in >> CHNVP(m_modal_reduction_type, "m_modal_reduction_type");
     archive_in >> CHNVP(m_is_model_reduced, "m_is_model_reduced");
+    archive_in >> CHNVP(m_internal_nodes_update, "m_internal_nodes_update");
+    archive_in >> CHNVP(m_modal_automatic_gravity, "m_modal_automatic_gravity");
     archive_in >> CHNVP(modal_q, "modal_q");
     archive_in >> CHNVP(modal_q_dt, "modal_q_dt");
     archive_in >> CHNVP(modal_q_dtdt, "modal_q_dtdt");
     archive_in >> CHNVP(full_forces_internal, "full_forces_internal");
-    archive_in >> CHNVP(m_internal_nodes_update, "internal_nodes_update");
 
     // Recompute statistics, offsets, etc.
     Setup();
