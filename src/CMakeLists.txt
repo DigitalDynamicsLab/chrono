@@ -87,6 +87,14 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
     if(MSVC_VERSION GREATER 1914)
       set(CH_CXX17 TRUE)
     endif()
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "IntelLLVM")
+    message(STATUS "IntelLLVM version:  ${CMAKE_CXX_COMPILER_VERSION}")
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 2017.0.0)
+      set(CH_CXX14 TRUE)
+    endif()
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 2019.0.0)
+      set(CH_CXX17 TRUE)
+    endif()
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "PGI")
     # CMake's standard support flags behave strangely with PGI compilers, don't trust them
     set(CH_CXX_FLAGS "")
@@ -450,18 +458,27 @@ endif()
 #-----------------------------------------------------------------------------
 # Miscellaneous compiler flags
 #-----------------------------------------------------------------------------
+message(STATUS "CMAKE_CXX_COMPILER_ID: ${CMAKE_CXX_COMPILER_ID}")
+message(STATUS "CMAKE_CXX_SIMULATE_ID: ${CMAKE_CXX_SIMULATE_ID}")
+
+if(CMAKE_C_COMPILER_ID MATCHES "Intel")
+  add_compile_options($<$<COMPILE_LANGUAGE:C>:-Werror-implicit-function-declaration>)
+endif()
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
-    if(MSVC)
-        add_definitions( "-D_CRT_SECURE_NO_DEPRECATE" )  # avoids deprecation warnings
-        add_definitions( "-D_SCL_SECURE_NO_DEPRECATE" )  # avoids deprecation warnings
-        add_definitions( "-DNOMINMAX" ) # do not use MSVC's min/max macros
-        add_definitions( "-MP" ) # perform parallel builds
+
+    if(CMAKE_CXX_COMPILER_ID MATCHES MSVC) # cannot simply use if(MSVC) because other compiler can "simulate" MSVC (e.g. IntelLLVM)
+      message(STATUS "Applying MSVC specific flags")
+
+        add_compile_definitions("_CRT_SECURE_NO_DEPRECATE")  # avoids deprecation warnings
+        add_compile_definitions("_SCL_SECURE_NO_DEPRECATE")  # avoids deprecation warnings
+        add_compile_definitions("NOMINMAX") # do not use MSVC's min/max macros
 
         set(CH_CXX_FLAGS "${CH_CXX_FLAGS} /Zc:__cplusplus")
         set(CH_CXX_FLAGS "${CH_CXX_FLAGS} /EHsc") # Resolve C4530: https://learn.microsoft.com/en-us/cpp/build/reference/eh-exception-handling-model
         
-
+        add_compile_definitions( "-MP" ) # perform parallel builds
+      
         # excluding wrong runtime libraries from the link (LNK4098): https://learn.microsoft.com/en-us/cpp/error-messages/tool-errors/linker-tools-warning-lnk4098
         if(USE_MSVC_STATIC_RUNTIME)
           set(CH_LINKERFLAG_LIB "${CH_LINKERFLAG_LIB} /NODEFAULTLIB:msvcrt.lib /NODEFAULTLIB:msvcrtd.lib /NODEFAULTLIB:libcmt$<$<NOT:$<CONFIG:Debug>>:d>.lib")
@@ -471,7 +488,15 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
           set(CH_LINKERFLAG_EXE "${CH_LINKERFLAG_EXE} /NODEFAULTLIB:libcmt.lib /NODEFAULTLIB:libcmtd.lib /NODEFAULTLIB:msvcrt$<$<NOT:$<CONFIG:Debug>>:d>.lib")
         endif()
 
-    endif(MSVC)
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES IntelLLVM)
+        message(STATUS "Applying IntelLLVM specific flags")
+        add_compile_definitions("_CRT_SECURE_NO_DEPRECATE")  # avoids deprecation warnings
+        add_compile_definitions("_SCL_SECURE_NO_DEPRECATE")  # avoids deprecation warnings
+        add_compile_definitions("NOMINMAX") # do not use MSVC's min/max macros
+        # set(CH_CXX_FLAGS "${CH_CXX_FLAGS} -Zc:cplusplus") ## should be appropriate, but it does not accept it
+        # set(CH_CXX_FLAGS "${CH_CXX_FLAGS} /Zc:cplusplus,alignedNew") # to enabled aligned allocation functions
+        set(CH_CXX_FLAGS "${CH_CXX_FLAGS} -EHsc") # Resolve C4530: https://learn.microsoft.com/en-us/cpp/build/reference/eh-exception-handling-model
+    endif()
 
     if(MINGW OR CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_GNUCXX)
         set(CH_CXX_FLAGS "${CH_CXX_FLAGS} -D_MINGW -D_WINDOWS")
@@ -605,7 +630,7 @@ if(CUDA_FOUND)
 endif()
 
 # For Bullet to use 32 bit math
-add_definitions( "-DBP_USE_FIXEDPOINT_INT_32" )
+add_compile_definitions( "-DBP_USE_FIXEDPOINT_INT_32" )
 
 #OPTION(USE_BULLET_DOUBLE "Compile Bullet in double precision" ON)
 #if (USE_BULLET_DOUBLE)

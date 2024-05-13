@@ -17,7 +17,7 @@
 
 namespace chrono {
 
-ChObj::ChObj() : m_tag(-1), ChTime(0) {
+ChObj::ChObj() : ChTime(0), m_tag(-1) {
     m_identifier = GenerateUniqueIdentifier();
 }
 

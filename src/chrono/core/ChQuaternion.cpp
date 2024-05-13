@@ -34,8 +34,6 @@ const ChQuaterniond Q_FLIP_AROUND_X(0., 1., 0., 0.);
 const ChQuaterniond Q_FLIP_AROUND_Y(0., 0., 1., 0.);
 const ChQuaterniond Q_FLIP_AROUND_Z(0., 0., 0., 1.);
 
-static const double FD_STEP = 1e-4;
-
 // -----------------------------------------------------------------------------
 
 // Check if two quaternions are equal

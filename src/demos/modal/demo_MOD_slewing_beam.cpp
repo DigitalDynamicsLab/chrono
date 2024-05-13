@@ -37,23 +37,35 @@
 #include "chrono/fea/ChBuilderBeam.h"
 #include "chrono/fea/ChMesh.h"
 #include "chrono_modal/ChModalAssembly.h"
+#include "chrono/core/ChTimer.h"
 
 #include "chrono/solver/ChDirectSolverLS.h"
+// #undef CHRONO_PARDISO_MKL
 #ifdef CHRONO_PARDISO_MKL
     #include "chrono_pardisomkl/ChSolverPardisoMKL.h"
+    #include <mkl.h>
 #endif
+
+// #include <fast_matrix_market/app/Eigen.hpp>
 
 using namespace chrono;
 using namespace chrono::modal;
 using namespace chrono::fea;
 
-void RunSlewingBeam(bool do_modal_reduction, ChModalAssembly::ReductionType reduction_type, ChMatrixDynamic<>& res, bool verbose) {
+void RunSlewingBeam(bool do_modal_reduction,
+                    ChModalAssembly::ReductionType reduction_type,
+                    ChMatrixDynamic<>& res,
+                    bool verbose,
+                    unsigned int num_threads_solver) {
+    std::cout << "###### RunSlewingBeam ######" << std::endl;
+
     double time_step = 0.002;
     double time_step_prt = 0.5;
-    double time_length = 50;
+    double time_length = 10.0;
 
     // Create a Chrono::Engine physical system
     ChSystemNSC sys;
+    sys.SetNumThreads(1, 1, 1);
 
     sys.Clear();
     sys.SetChTime(0);
@@ -191,12 +203,20 @@ void RunSlewingBeam(bool do_modal_reduction, ChModalAssembly::ReductionType redu
 
     // Set linear solver
 #ifdef CHRONO_PARDISO_MKL
-    auto mkl_solver = chrono_types::make_shared<ChSolverPardisoMKL>();
-    sys.SetSolver(mkl_solver);
+    auto solver = chrono_types::make_shared<ChSolverPardisoMKL>(num_threads_solver);
+    sys.SetSolver(solver);
+    std::cout << "Solver type: "
+              << "PardisoMKL" << std::endl;
 #else
-    auto qr_solver = chrono_types::make_shared<ChSolverSparseQR>();
-    sys.SetSolver(qr_solver);
+    auto solver = chrono_types::make_shared<ChSolverSparseLU>();
+    sys.SetSolver(solver);
+    std::cout << "Solver type: "
+              << "SparseLU" << std::endl;
+    Eigen::setNbThreads(num_threads_solver);
 #endif
+
+    //solver->LockSparsityPattern(true);
+
 
     sys.Setup();
     sys.Update();
@@ -239,7 +259,10 @@ void RunSlewingBeam(bool do_modal_reduction, ChModalAssembly::ReductionType redu
     res.setZero();
 
     double step_timer = 0;
-
+    ChTimer timer;
+    timer.start();
+    std::ofstream matrix_firststep_stream("matrix_firststep.txt");
+    std::ofstream rhs_firststep_stream("rhs_firststep.txt");
     while (frame < Nframes) {
         double tao = sys.GetChTime() / T;
 
@@ -252,6 +275,12 @@ void RunSlewingBeam(bool do_modal_reduction, ChModalAssembly::ReductionType redu
         driving_fun->SetSetpoint(rot_angle, sys.GetChTime());
 
         sys.DoStepDynamics(time_step);
+
+        // if (frame == 0) {
+        //     fast_matrix_market::write_matrix_market_eigen(matrix_firststep_stream, solver->A());
+        //     fast_matrix_market::write_matrix_market_eigen_dense(rhs_firststep_stream, solver->b());
+        // }
+
         step_timer += sys.GetTimerStep();
 
         res(frame, 0) = sys.GetChTime();
@@ -284,16 +313,30 @@ void RunSlewingBeam(bool do_modal_reduction, ChModalAssembly::ReductionType redu
                 modal_assembly_list.back()->GetConstraintsResidualF().transpose().segment(0, 6);
         }
 
-        if (verbose && (frame % itv_frame == 0)) {
-            std::cout << "t: " << sys.GetChTime() << "\t";
-            std::cout << "Rot. Speed (rad/s): " << res(frame, 1) << "\t";
-            std::cout << "Rel. Def.:\t" << relative_defl.GetPos().x() - beam_L << "\t" << relative_defl.GetPos().y()
-                      << "\t" << relative_defl.GetPos().z() << "\n";
-        }
+        // if (verbose && (frame % itv_frame == 0)) {
+        //     std::cout << "t: " << sys.GetChTime() << "\t";
+        //     std::cout << "Rot. Speed (rad/s): " << res(frame, 1) << "\t";
+        //     std::cout << "Rel. Def.:\t" << relative_defl.GetPos().x() - beam_L << "\t" << relative_defl.GetPos().y()
+        //               << "\t" << relative_defl.GetPos().z() << "\n";
+        // }
         frame++;
     }
 
-    std::cout << "Simulation time = " << step_timer << std::endl;
+    // std::ofstream output_stream_end("matrix_endstep.txt");
+    // fast_matrix_market::write_options wo;
+    // // wo.precision = 12;
+    // fast_matrix_market::write_matrix_market_eigen(output_stream_end, solver->A(), wo);
+
+    // std::cout << "Simulation time = " << step_timer << std::endl;
+    std::cout << "Solver Threads: " << num_threads_solver << std::endl;
+    std::cout << "Total elapsed time: " << timer.GetTimeSeconds() << "s" << std::endl;
+
+    std::cout << "SetupAssembly: " << solver->GetTimeSetup_Assembly() << "s" << std::endl;
+    std::cout << "SetupSolverCall: " << solver->GetTimeSetup_SolverCall() << "s" << std::endl;
+    std::cout << "SolveAssembly: " << solver->GetTimeSolve_Assembly() << "s" << std::endl;
+    std::cout << "SolveSolverCall: " << solver->GetTimeSolve_SolverCall() << "s" << std::endl;
+
+    std::cout << "#########################" << std::endl;
 }
 
 bool CompareResults(const ChMatrixDynamic<>& ref_mat, const ChMatrixDynamic<>& my_mat) {
@@ -352,23 +395,69 @@ int main(int argc, char* argv[]) {
     std::cout << "Copyright (c) 2024 projectchrono.org\nChrono version: " << CHRONO_VERSION << "\n\n";
 
     bool verbose = true;
+#ifdef CHRONO_PARDISO_MKL
+    mkl_set_dynamic(0);
+#endif
 
     std::cout << "1. Run full corotational beam model:\n";
     // ChModalAssembly should be able to run successfully in the full state
     ChMatrixDynamic<> res_corot;
-    RunSlewingBeam(false, ChModalAssembly::ReductionType::CRAIG_BAMPTON, res_corot, verbose);
+    std::array<unsigned int, 7> num_threads_solver = {1, 2, 4, 8, 16, 24, 32};
+     for (auto num_threads : num_threads_solver) {
+         RunSlewingBeam(false, ChModalAssembly::ReductionType::CRAIG_BAMPTON, res_corot, verbose, num_threads);
+     }
 
-    std::cout << "\n\n2. Run modal reduction model (Craig Bampton method):\n";
-    ChMatrixDynamic<> res_modal_CraigBampton;
-    RunSlewingBeam(true, ChModalAssembly::ReductionType::CRAIG_BAMPTON, res_modal_CraigBampton, verbose);
-    bool check_CraigBampton = CompareResults(res_corot, res_modal_CraigBampton);
-    std::cout << "\nCraig-Bampton reduced model check: " << (check_CraigBampton ? "PASSED" : "FAILED") << std::endl;
+    //RunSlewingBeam(false, ChModalAssembly::ReductionType::CRAIG_BAMPTON, res_corot, verbose, 1);
 
-    std::cout << "\n\n3. Run modal reduction model (Herting method):\n";
-    ChMatrixDynamic<> res_modal_Herting;
-    RunSlewingBeam(true, ChModalAssembly::ReductionType::HERTING, res_modal_Herting, verbose);
-    bool check_Herting = CompareResults(res_corot, res_modal_Herting);
-    std::cout << "\nHerting reduced model check: " << (check_Herting ? "PASSED" : "FAILED") << std::endl;
+    // std::cout << "\n\n2. Run modal reduction model (Craig Bampton method):\n";
+    // ChMatrixDynamic<> res_modal_CraigBampton;
+    // RunSlewingBeam(true, ChModalAssembly::ReductionType::CRAIG_BAMPTON, res_modal_CraigBampton, verbose);
+    // bool check_CraigBampton = CompareResults(res_corot, res_modal_CraigBampton);
+    // std::cout << "\nCraig-Bampton reduced model check: " << (check_CraigBampton ? "PASSED" : "FAILED") << std::endl;
+
+    // std::cout << "\n\n3. Run modal reduction model (Herting method):\n";
+    // ChMatrixDynamic<> res_modal_Herting;
+    // RunSlewingBeam(true, ChModalAssembly::ReductionType::HERTING, res_modal_Herting, verbose);
+    // bool check_Herting = CompareResults(res_corot, res_modal_Herting);
+    // std::cout << "\nHerting reduced model check: " << (check_Herting ? "PASSED" : "FAILED") << std::endl;
+
+    //std::ifstream mymatfile("matrix_firststep.txt");
+    //ChSparseMatrix mymat;
+    //fast_matrix_market::read_matrix_market_eigen(mymatfile, mymat);
+    //std::cout << "NonZeros (original): " << mymat.nonZeros() << std::endl;
+    //mymat.prune(1e-16);
+    //std::cout << "NonZeros (after prune): " << mymat.nonZeros() << std::endl;
+
+
+    //std::ifstream myrhsfile("rhs_firststep.txt");
+    //ChVectorDynamic<> myrhs;
+    //fast_matrix_market::read_matrix_market_eigen_dense(myrhsfile, myrhs);
+
+    //ChTimer timer_mkl;
+    //timer_mkl.start();
+    //Eigen::PardisoLU<ChSparseMatrix> m_engine_mkl;
+    //mkl_set_dynamic(0);
+    //mkl_set_num_threads(1);
+    //ChVectorDynamic<> mysol_mkl;
+
+    //for (auto i = 0; i < 500; ++i) {
+    //    m_engine_mkl.compute(mymat);
+
+    //    mysol_mkl = m_engine_mkl.solve(myrhs);
+    //}
+    //std::cout << "Elapsed time MKL: " << timer_mkl.GetTimeSeconds() << "s" << std::endl;
+
+    //ChTimer timer_sqr;
+    //Eigen::SparseQR<ChSparseMatrix, Eigen::COLAMDOrdering<int>> m_engine_qr;
+    //Eigen::setNbThreads(1);
+    //ChVectorDynamic<> mysol_sqr;
+    //timer_sqr.start();
+    //for (auto i = 0; i < 500; ++i) {
+    //    m_engine_qr.compute(mymat);
+
+    //    mysol_sqr = m_engine_qr.solve(myrhs);
+    //}
+    //std::cout << "Elapsed time SparseQR: " << timer_sqr.GetTimeSeconds() << "s" << std::endl;
 
     return 0;
 }

@@ -13,17 +13,41 @@
 // =============================================================================
 
 #include <bitset>
+#include <mpi.h>
 
 #include "chrono_mumps/ChMumpsEngine.h"
 
 namespace chrono {
 
 ChMumpsEngine::ChMumpsEngine() {
+
+    //std::cout << "Initializing MPI for Mumps Engine" << std::endl;
+
+    //// Initialize MPI
+    //int argc;
+    //char** argv;
+    //int myid;
+    //std::cout << "Calling MPI_Init" << std::endl;
+
+    //int MPI_Init_ret = MPI_Init(&argc, &argv);
+    //std::cout << "Called MPI_Init" << std::endl;
+
+    //if (MPI_Init_ret!=MPI_SUCCESS) {
+    //    std::cerr << "MPI_Init failed with error code: " << MPI_Init_ret << std::endl;
+    //}
+    //int MPI_Comm_rank_ret = MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+    //if (MPI_Comm_rank_ret!=MPI_SUCCESS) {
+    //    std::cerr << "MPI_Comm_rank failed with error code: " << MPI_Comm_rank_ret << std::endl;
+    //}
+    //if (myid == 0) {
+    //    std::cout << "MPI_Init successful. Current ID: " << myid << std::endl;
+    //}
+
     /* Initialize a MUMPS instance. Use MPI_COMM_WORLD */
     mumps_id.job = INIT;
     mumps_id.par = 1;
     mumps_id.sym = UNSYMMETRIC;
-    mumps_id.comm_fortran = -987654;
+    mumps_id.comm_fortran = USE_COMM_WORLD;
 
     dmumps_c(&mumps_id);
 
@@ -41,6 +65,15 @@ ChMumpsEngine::ChMumpsEngine() {
 ChMumpsEngine::~ChMumpsEngine() {
     mumps_id.job = END;
     dmumps_c(&mumps_id);  // Terminate instance
+
+    //std::cout << "Finalize MPI instance" << std::endl;
+    //// Terminate MPI instance
+    //int MPI_Finalize_ret = MPI_Finalize();
+    //if (MPI_Finalize_ret!=MPI_SUCCESS) {
+    //    std::cerr << "MPI_Finalize failed with error code: " << MPI_Finalize_ret << std::endl;
+    //}
+    //std::cout << "MPI instance finalized" << std::endl;
+
 }
 
 void ChMumpsEngine::SetProblem(const ChSparseMatrix& Z, ChVectorRef rhs) {
@@ -103,62 +136,62 @@ int ChMumpsEngine::MumpsCall(mumps_JOB job_call) {
 
 void ChMumpsEngine::PrintINFOG() {
     if (mumps_id.INFOG(1) > 0) {
-        printf("WARN: INFOG(1)=");
+        std::cout << "WARN: INFOG(1)=";
         typedef std::bitset<sizeof(int)> IntBits;
         if (IntBits(mumps_id.INFOG(1)).test(0))
-            printf("+1: Row or column index out of range. Faulty entries: %d\n", mumps_id.INFOG(2));
+            std::cout << "+1: Row or column index out of range. Faulty entries: " << mumps_id.INFOG(2) << std::endl;
         if (IntBits(mumps_id.INFOG(1)).test(1))
-            printf("+2: Solution max-norm = 0\n");
+            std::cout << "+2: Solution max-norm = 0" << std::endl;
         if (IntBits(mumps_id.INFOG(1)).test(3))
-            printf("+8: More than %d iterative refinements are required\n", mumps_id.ICNTL(10));
+            std::cout << "+8: More than " << mumps_id.ICNTL(10) << " iterative refinements are required." << std::endl;
         return;
     }
 
     if (mumps_id.INFOG(1) == 0) {
-        printf("INFOG(1)=0: Mumps is successful!\n");
+        std::cout << "INFOG(1)=0: Mumps is successful!" << std::endl;
         return;
     }
 
-    printf("ERR: INFOG(1)=");
+    std::cout << "ERR: INFOG(1)=";
     switch (mumps_id.INFOG(1)) {
         case (0):
-            printf("0: Mumps is successful!\n");
+            std::cout << "0: Mumps is successful!" << std::endl;
             break;
         case (-1):
-            printf("-1: Error on processor %d\n", mumps_id.INFOG(2));
+            std::cout << "-1: Error on processor " << mumps_id.INFOG(2) << std::endl;
             break;
         case (-2):
-            printf("-2: Number of nonzeros out of range NZ=%d\n", mumps_id.INFOG(2));
+            std::cout << "-2: Number of nonzeros out of range NZ=" << mumps_id.INFOG(2) << std::endl;
             break;
         case (-3):
-            printf("-3: Mumps called with wrong JOB. JOB=%d\n", mumps_id.INFOG(2));
+            std::cout << "-3: Mumps called with wrong JOB. JOB=" << mumps_id.INFOG(2) << std::endl;
             break;
         case (-4):
-            printf("-4: Error in user-provided permutation array PERM_IN at position: %d\n", mumps_id.INFOG(2));
+            std::cout << "-4: Error in user-provided permutation array PERM_IN at position: " << mumps_id.INFOG(2) << std::endl;
             break;
         case (-5):
-            printf("-5: Problem of real workspace allocation of size %d during analysis\n", mumps_id.INFOG(2));
+            std::cout << "-5: Problem of real workspace allocation of size " << mumps_id.INFOG(2) << " during analysis" << std::endl;
             break;
         case (-6):
-            printf("-6: Matrix is singular in structure. Matrix rank: %d\n", mumps_id.INFOG(2));
+            std::cout << "-6: Matrix is singular in structure. Matrix rank: " << mumps_id.INFOG(2) << std::endl;
             break;
         case (-7):
-            printf("-7: Problem of integer workspace allocation of size %d during analysis\n", mumps_id.INFOG(2));
+            std::cout << "-7: Problem of integer workspace allocation of size " <<  mumps_id.INFOG(2) << " during analysis" << std::endl;
             break;
         case (-10):
-            printf("-10: Matrix is numerically singular.\n");
+            std::cout << "-10: Matrix is numerically singular." << std::endl;
             break;
         case (-16):
-            printf("-16: N is out of range. N=%d\n", mumps_id.INFOG(2));
+            std::cout << "-16: N is out of range. N=" << mumps_id.INFOG(2) << std::endl;
             break;
         case (-21):
-            printf("-21: PAR=1 not allowed because only one processor is available.\n");
+            std::cout << "-21: PAR=1 not allowed because only one processor is available." << std::endl;
             break;
         case (-22):
-            printf("-22: Array pointers have problems. INFOG(2)=%d\n", mumps_id.INFOG(2));
+            std::cout << "-22: Array pointers have problems. INFOG(2)=" << mumps_id.INFOG(2) << std::endl;
             break;
         default:
-            printf("%d: See the user guide. INFOG(2)=%d\n", mumps_id.INFOG(1), mumps_id.INFOG(2));
+            std::cout << mumps_id.INFOG(1) << ": See the user guide. INFOG(2)=" << mumps_id.INFOG(2) << std::endl;
     }
 }
 

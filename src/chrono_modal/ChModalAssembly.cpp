@@ -717,7 +717,7 @@ void ChModalAssembly::ApplyModeAccelerationTransformation(const ChModalDamping& 
         else
             rhs << K_IB_loc.col(i).toDense();
 
-        ChVectorDynamic<> x = m_solver_invKIIc.solve(rhs.sparseView());
+        ChVectorDynamic<> x = m_solver_invKIIc.solve(rhs);
 
         Psi_S.col(i) = -x.head(m_num_coords_vel_internal);
         // Psi_S_C.col(i) = -x;
@@ -761,7 +761,7 @@ void ChModalAssembly::ApplyModeAccelerationTransformation(const ChModalDamping& 
         else
             rhs << rhs_dyn.col(i);
 
-        ChVectorDynamic<> x = m_solver_invKIIc.solve(rhs.sparseView());
+        ChVectorDynamic<> x = m_solver_invKIIc.solve(rhs);
 
         Psi_D.col(i) = -x.head(m_num_coords_vel_internal);
         // Psi_D_C.col(i) = -x;
@@ -808,7 +808,7 @@ void ChModalAssembly::ApplyModeAccelerationTransformation(const ChModalDamping& 
         else
             rhs << f_loc;
 
-        ChVectorDynamic<> x = m_solver_invKIIc.solve(rhs.sparseView());
+        ChVectorDynamic<> x = m_solver_invKIIc.solve(rhs);
 
         Psi_Cor = x.head(m_num_coords_vel_internal);
         // Psi_Cor_C = x;
@@ -991,7 +991,7 @@ void ChModalAssembly::UpdateStaticCorrectionMode() {
     else
         rhs << f_loc;
 
-    ChVectorDynamic<> x = m_solver_invKIIc.solve(rhs.sparseView());
+    ChVectorDynamic<> x = m_solver_invKIIc.solve(rhs);
 
     Psi_Cor = x.head(m_num_coords_vel_internal);
     // Psi_Cor_C = x;

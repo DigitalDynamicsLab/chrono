@@ -67,6 +67,9 @@ int main(int argc, char* argv[]) {
     mvisualizebeamC->SetZbufferHide(false);
     my_mesh->AddVisualShapeFEA(mvisualizebeamC);
 
+    std::cout << "Starting Irrlicht" << std::endl;
+
+
     // Create the Irrlicht visualization system
     auto vis = chrono_types::make_shared<ChVisualSystemIrrlicht>();
     vis->SetWindowSize(800, 600);
@@ -78,18 +81,23 @@ int main(int argc, char* argv[]) {
     vis->AddCamera(ChVector3d(0.0, 0.6, -1.0));
     vis->AttachSystem(&sys);
 
+    std::cout << "Starting Mumps" << std::endl;
+
+
     // Configure MKL solver.
     // For this simple and relatively small problem, use of the sparsity pattern learner may introduce additional
     // overhead (if the sparsity pattern is not locked).
-    auto mkl_solver = chrono_types::make_shared<ChSolverMumps>();
-    mkl_solver->UseSparsityPatternLearner(false);
-    mkl_solver->LockSparsityPattern(false);
-    sys.SetSolver(mkl_solver);
+    auto mumps_solver = chrono_types::make_shared<ChSolverMumps>();
+    mumps_solver->UseSparsityPatternLearner(false);
+    mumps_solver->LockSparsityPattern(false);
+    sys.SetSolver(mumps_solver);
 
     sys.Update();
 
     // Set integrator
     sys.SetTimestepperType(ChTimestepper::Type::EULER_IMPLICIT_LINEARIZED);
+
+    std::cout << "Running loop" << std::endl;
 
     // Simulation loop
     while (vis->Run()) {
