@@ -107,6 +107,9 @@ class ChApiModal ChModalAssembly : public ChAssembly {
     /// iteration. The residual of constraint equations is an indicator to check the convergence of the modal method.
     const ChVectorDynamic<>& GetConstraintsResidualF() { return m_res_CF; }
 
+    const ChVectorDynamic<>& GetConstraintsResidualFdt() { return this->m_res_CFdt; }
+
+
     /// Set verbose output.
     void SetVerbose(bool verbose) { m_verbose = verbose; }
 
@@ -628,7 +631,9 @@ class ChApiModal ChModalAssembly : public ChAssembly {
     ChFrameMoving<> floating_frame_F;   ///< floating frame of reference F in the deformed configuration
     // ChFrameMoving<> floating_frame_F_old;
     ChVectorDynamic<> m_res_CF;  ///< residual of the six constraint equations on the floating frame F
-    double m_tol_CF = 0;         // tolerance of the Newton-Raphson iteration in searching for the floating frame F
+    ChVectorDynamic<>
+        m_res_CFdt;       ///< residual of the six constraint equations on the floating frame F at the velocity level
+    double m_tol_CF = 0;  // tolerance of the Newton-Raphson iteration in searching for the floating frame F
 
     ChState m_full_state_x0;  // full state snapshot of assembly in the initial undeformed configuration
     ChState m_full_state_x;   // full state snapshot of assembly in the deformed configuration

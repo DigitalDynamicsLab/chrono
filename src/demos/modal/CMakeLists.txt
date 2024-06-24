@@ -10,6 +10,12 @@ if(ENABLE_MODULE_IRRLICHT)
    set(DEMOS ${DEMOS}
        demo_MOD_analysis
        demo_MOD_reduction
+       demo_MOD_assembly_hierarchy
+       demo_MOD_buckling
+       demo_MOD_slewing_beam_fortest
+       demo_MOD_slider_crank
+       demo_MOD_talisman
+	   demo_MOD_links
    )
 endif()
 

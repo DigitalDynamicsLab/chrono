@@ -335,6 +335,22 @@ void ChModalAssembly::UpdateFloatingFrameOfReference() {
 
     ComputeConstraintResidualF(m_res_CF);
 
+    {  // compute the residual of constraints at the velocity level,
+        // which should be zero in theory, but in practice not because of discretization error.
+        // In general, smaller residual "m_res_CFdt" means better accuracy.
+
+        // this->UpdateTransformationMatrix();
+        // this->ComputeProjectionMatrix();
+
+        ChVectorDynamic<> u_locred(num_coords_vel_bou_mod);
+        ChVectorDynamic<> e_locred(num_coords_vel_bou_mod);
+        ChVectorDynamic<> edt_locred(num_coords_vel_bou_mod);
+        this->GetLocalDeformations(u_locred, e_locred, edt_locred);
+
+        // the constraint vector C_F to eliminate the redundant DOFs of the floating frame F
+        m_res_CFdt = this->U_locred_0.transpose() * this->M_red * edt_locred;  // of size 6*1, expected to be zero
+    }
+
     if (this->m_verbose) {
         ChVector3d pos_F = this->floating_frame_F.GetPos();
         ChVector3d theta_F = this->floating_frame_F.GetRot().GetRotVec() * CH_RAD_TO_DEG;
