@@ -37,6 +37,7 @@ set(FEA_DEMOS ${FEA_DEMOS}
     demo_FEA_beams_constr
     demo_FEA_beams_extrude
     demo_FEA_cablesMKL
+    demo_FEA_cablesMKL_Mooringline
     demo_FEA_abaqus_wheel
     demo_FEA_shellsReissner
     demo_FEA_shellsBST

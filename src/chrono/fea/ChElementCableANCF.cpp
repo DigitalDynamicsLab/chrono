@@ -19,11 +19,19 @@
 #include "chrono/core/ChQuadrature.h"
 #include "chrono/fea/ChElementCableANCF.h"
 
+//#include "chrono/fea/ChElementGeneric.h"
+//#include "chrono/physics/ChLoadable.h"
+//#include "chrono/physics/ChLoad.h"
+
 namespace chrono {
 namespace fea {
 
-ChElementCableANCF::ChElementCableANCF() : m_alpha(0), m_use_damping(false) {
-    m_nodes.resize(2);
+
+//--m_alpha=2*w*Xi=4*pi*f*Xi=1.256*Xi;
+// f=0.1Hz for the mooringline, the frequency depends on the certain system
+// Xi is the damping ratio
+    ChElementCableANCF::ChElementCableANCF() : m_alpha(0.001*1.256), m_use_damping(true) {
+    m_nodes.resize(2);  
 }
 
 void ChElementCableANCF::SetNodes(std::shared_ptr<ChNodeFEAxyzD> nodeA, std::shared_ptr<ChNodeFEAxyzD> nodeB) {
@@ -292,9 +300,10 @@ void ChElementCableANCF::ComputeInternalJacobians(double Kfactor, double Rfactor
                 ChVector3d vf1 = Vcross(vr_x, vr_xx);
                 double f = vf1.Length();
                 double g1 = vr_x.Length();
-                double g = pow(g1, 3);
+                double g = pow(g1, 2);
+                double k = f / g;
 
-                g_e = (3 * g1) * Nd * (*d) * Sd;
+                g_e = (2 * pow(g1, 1)) * Nd * (*d) * Sd;
 
                 // do:  fe1=cross(Sd,r_xxrep)+cross(r_xrep,Sdd);
                 for (int col = 0; col < 12; ++col) {
@@ -421,6 +430,8 @@ void ChElementCableANCF::ComputeKRMmatricesGlobal(ChMatrixRef H, double Kfactor,
 
     // Load Jac + Mfactor*[M] into H
     H = m_JacobianMatrix + Mfactor * m_MassMatrix;
+
+   
 }
 
 // Computes the internal forces and set values in the Fi vector.
@@ -553,6 +564,7 @@ void ChElementCableANCF::ComputeInternalForces_Impl(const ChVector3d& pA,
         ChMatrixNM<double, 1, 12> k_e;
         ChMatrixNM<double, 3, 12> fe1;
 
+
         // Evaluate  at point x
         virtual void Evaluate(ChVectorN<double, 12>& result, const double x) override {
             element->ShapeFunctionsDerivatives(Nd, x);
@@ -579,11 +591,10 @@ void ChElementCableANCF::ComputeInternalForces_Impl(const ChVector3d& pA,
             ChVector3d vf1 = Vcross(vr_x, vr_xx);
             double f = vf1.Length();
             double g1 = vr_x.Length();
-            double g = pow(g1, 3);
+            double g = pow(g1, 2);
             double k = f / g;
-
-            g_e = (3 * g1) * Nd * (*d) * Sd;
-
+            g_e = (2 * g1) * Nd * (*d) * Sd;
+            
             // do:  fe1=cross(Sd,r_xxrep)+cross(r_xrep,Sdd);
             for (int col = 0; col < 12; ++col) {
                 ChVector3d Sd_i = Sd.col(col);
@@ -600,12 +611,32 @@ void ChElementCableANCF::ComputeInternalForces_Impl(const ChVector3d& pA,
             }
 
             k_e = (f_e * g - g_e * f) * (1 / (pow(g, 2)));
+            // ---previouse material damping, found to have little or no noticeable damping effect.
+            // -- The simulation was foud to fail to converge with a large damping coefficient, such as in the range of 0.1 to 0.01.
+            //if (element->m_use_damping)
+            //     k += (element->m_alpha) * (k_e * (*d_dt))(0, 0); 
+ 
+          
+            // ---revised  material damping, converge, but still has issues, found to have little or no noticeable damping effect
+            //ChVector3d Sd_d_dt = Sd * (*d_dt);
+            //ChVector3d Sdd_d_dt = Sdd * (*d_dt);
+            //ChMatrixNM<double, 1, 3> V1 = Vcross(Sd_d_dt, vr_xx).eigen();
+            //ChMatrixNM<double, 1, 3> V2 = Vcross(vr_x, Sdd_d_dt).eigen();
+            //double g_dt;
+            //double f_dt; 
+            //double k_dt;
+            //double k2;
+            //g_dt = Nd * (*d) * (2 * g1) * Sd * (*d_dt);
+            //f_dt = Nd * (*d) * (V1 + V2).transpose();
+            //k_dt = (f_dt * g -  f * g_dt ) * (1 / (pow(g, 2)));
 
             // Add damping if selected by user: curvature rate
-            if (element->m_use_damping)
-                k += (element->m_alpha) * (k_e * (*d_dt))(0, 0);
+            //  if (element->m_use_damping) {
+            //    k2 = (element->m_alpha) * k_dt; 
+            //      k += k2;
+            //}
 
-            result = k * k_e.transpose();
+          result =  k_e.transpose()*k;
         }
     };
 
@@ -625,6 +656,11 @@ void ChElementCableANCF::ComputeInternalForces_Impl(const ChVector3d& pA,
 
     // Also subtract contribution of initial configuration
     Fi -= (E * I * length) * Fcurv + m_GenForceVec0;
+    if (m_use_damping) {                                    //----Rayleigh damping (Only consider the mass)
+       Fi -= m_alpha * (m_MassMatrix)*vel_vector;           //  --- Right(considering the mass damping)
+      //   Fi -= m_alpha * (m_JacobianMatrix)*vel_vector;   //  --- Divergent(considering the stiffiness damping)
+    }
+
 }
 
 // Compute the generalized force vector due to gravity using the efficient ANCF specific method
@@ -695,7 +731,61 @@ void ChElementCableANCF::EvaluateSectionForceTorque(const double eta, ChVector3d
     // double xi = (eta*2 - 1.0);
     // double xi = (eta + 1.0) / 2.0;
 
-    /* To be completed*/
+
+    double Area = m_section->Area;
+    double E = m_section->E;
+    double I = m_section->I;
+
+
+    double xi = (eta + 1.0) / 2.0;
+
+    ShapeFunctions(N, xi);  // Evaluate shape functions
+    ShapeFunctionsDerivatives(Nd, xi);
+    ShapeFunctionsDerivatives2(Ndd, xi);
+    ChVectorDynamic<> mD(GetNumCoordsPosLevel());
+
+    GetStateBlock(mD);
+
+    ChMatrixNM<double, 3, 12> Sd;
+    Sd.setZero();
+    for (int i = 0; i < 4; i++) {
+        Sd(0, 3 * i + 0) = Nd(i);
+        Sd(1, 3 * i + 1) = Nd(i);
+        Sd(2, 3 * i + 2) = Nd(i);
+    }
+
+    ChMatrixNM<double, 3, 12> Sdd;
+    Sdd.setZero();
+    for (int i = 0; i < 4; i++) {
+        Sdd(0, 3 * i + 0) = Ndd(i);
+        Sdd(1, 3 * i + 1) = Ndd(i);
+        Sdd(2, 3 * i + 2) = Ndd(i);
+    }
+
+    ChVector3d vr_x(Sd * mD);
+    ChVector3d vr_xx(Sdd * mD);
+    ChVector3d vf1 = Vcross(vr_x, vr_xx);
+    double f = vf1.Length();
+    double g1 = vr_x.Length();
+    double g = pow(g1, 2);
+
+    ChVector3d StrainV;
+    StrainV.x() = vr_x.Length2() - 1.0;
+    StrainV.y() = f / g;  // Bending strain measure (Gertmayer and Shabana, 2006)
+
+
+    ChVector3d v_y; 
+    v_y.x() = 0;
+    v_y.y() = 1;
+    v_y.z() = 0;
+    ChVector3d v_K = Vcross(vr_x, v_y);
+    
+
+    Fforce = StrainV.x() * E * Area * vr_x / g1;
+
+    Mtorque = StrainV.y() * E * I * v_K / g1;
+
+
 }
 
 void ChElementCableANCF::EvaluateSectionStrain(const double eta, ChVector3d& StrainV) {
@@ -735,7 +825,7 @@ void ChElementCableANCF::EvaluateSectionStrain(const double eta, ChVector3d& Str
     ChVector3d vf1 = Vcross(vr_x, vr_xx);
     double f = vf1.Length();
     double g1 = vr_x.Length();
-    double g = pow(g1, 3);
+    double g = pow(g1, 2);
 
     StrainV.x() = vr_x.Length2() - 1.0;
     StrainV.y() = f / g;  // Bending strain measure (Gertmayer and Shabana, 2006)
